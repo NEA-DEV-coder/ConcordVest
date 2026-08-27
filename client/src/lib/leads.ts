@@ -1,0 +1,85 @@
+/* CONCORDVEST / Quiet Structure: lead data stays compact, contextual, and ready for a future CRM without changing the current front-end experience. */
+export type LeadStatus = "New" | "Contacted" | "Qualified" | "Appointment" | "Converted" | "Closed";
+export type LeadInterestType = "Property Enquiry" | "Viewing Request" | "Renovation Quote" | "Site Inspection" | "Agent Conversation";
+export type LeadSource = "Instagram" | "Facebook" | "Google" | "Direct" | "Property Page" | "Service Page" | "Inspiration" | "Projects" | "Unknown";
+
+export interface LeadPayload {
+  id: string;
+  name: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  interestType: LeadInterestType;
+  property?: string;
+  service?: string;
+  message: string;
+  source: LeadSource;
+  page: string;
+  date: string;
+  status: LeadStatus;
+  metadata?: Record<string, string>;
+}
+
+export interface LeadContext {
+  page: string;
+  source: LeadSource;
+  property?: string;
+  propertyUrl?: string;
+  service?: string;
+}
+
+const configuredWhatsAppNumber = import.meta.env.VITE_CONCORDVEST_WHATSAPP_NUMBER as string | undefined;
+export const CONCORDVEST_WHATSAPP_NUMBER = configuredWhatsAppNumber?.replace(/\D/g, "") || "";
+
+export function getLeadContext(overrides: Partial<LeadContext> = {}): LeadContext {
+  const params = new URLSearchParams(window.location.search);
+  const sourceParam = params.get("source")?.toLowerCase();
+  const sourceMap: Record<string, LeadSource> = {
+    instagram: "Instagram",
+    facebook: "Facebook",
+    google: "Google",
+    direct: "Direct",
+    property: "Property Page",
+    service: "Service Page",
+    inspiration: "Inspiration",
+    projects: "Projects",
+  };
+  const referrer = document.referrer.toLowerCase();
+  const inferredSource = sourceMap[sourceParam || ""] || (referrer.includes("instagram") ? "Instagram" : referrer.includes("facebook") ? "Facebook" : referrer.includes("google") ? "Google" : "Direct");
+  return { page: window.location.href, source: inferredSource || "Unknown", ...overrides };
+}
+
+export function createLeadId() {
+  return `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createLead(payload: Omit<LeadPayload, "id" | "date" | "status">): LeadPayload {
+  return { ...payload, id: createLeadId(), date: new Date().toISOString(), status: "New" };
+}
+
+export function buildWhatsAppUrl(message: string) {
+  const base = CONCORDVEST_WHATSAPP_NUMBER ? `https://wa.me/${CONCORDVEST_WHATSAPP_NUMBER}` : "https://api.whatsapp.com/send";
+  return `${base}?text=${encodeURIComponent(message)}`;
+}
+
+export function buildPropertyWhatsAppMessage(propertyName: string) {
+  return `Hello Concordvest, I'm interested in ${propertyName}. I found it through your website and would like more information.`;
+}
+
+export function buildViewingWhatsAppMessage(propertyName: string, date: string, time: string) {
+  return `Hello Concordvest, I would like to request a viewing for ${propertyName}. My preferred time is ${date} at ${time}. I found it through your website.`;
+}
+
+export function recordLead(lead: LeadPayload) {
+  try {
+    const existing = JSON.parse(window.localStorage.getItem("concordvest-leads") || "[]") as LeadPayload[];
+    window.localStorage.setItem("concordvest-leads", JSON.stringify([...existing, lead]));
+  } catch {
+    // Static mode keeps the flow moving even when browser storage is unavailable.
+  }
+}
+
+export function buildLeadWhatsAppMessage(lead: Pick<LeadPayload, "interestType" | "name" | "phone" | "whatsapp" | "email" | "property" | "service" | "message">) {
+  const context = [lead.property && `Property: ${lead.property}`, lead.service && `Service: ${lead.service}`].filter(Boolean).join("\n");
+  return [`Hello Concordvest, I would like help with a ${lead.interestType.toLowerCase()}.`, `Name: ${lead.name}`, `Phone: ${lead.phone}`, `WhatsApp: ${lead.whatsapp}`, `Email: ${lead.email}`, context, `Message: ${lead.message}`].filter(Boolean).join("\n");
+}
