@@ -59,6 +59,8 @@ const localStorageMock = {
 
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
+import { beforeAll, afterAll } from 'vitest';
+
 // Suppress console errors during tests
 const originalError = console.error;
 beforeAll(() => {

@@ -11,7 +11,7 @@ import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { ServiceCard } from "@/components/ShowcaseCards";
 import { EnquiryModal, whatsappLink } from "@/components/EnquiryModal";
 import { ViewingModal } from "@/components/ViewingModal";
-import { formatNaira } from "@/lib/properties";
+import { formatNaira, type PropertyRecord } from "@/lib/properties";
 import { useProperty, useProperties } from "@/hooks/useProperties";
 import { servicePackages } from "@/lib/services";
 import { resolveNavigation } from "@/lib/navigation";

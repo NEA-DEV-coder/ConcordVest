@@ -6,8 +6,8 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Editorial";
 import { BrandButton } from "@/components/BrandButton";
 import { RelatedContentSection } from "@/components/RelatedContent";
-import { useArticle, useArticles, useProjects } from "@/hooks/useContent";
-import { useService } from "@/hooks/useContent";
+import { useArticle, useArticles, useProjects, useService } from "@/hooks/useContent";
+import { servicePackages, type ServicePackage } from "@/lib/services";
 import { resolveNavigation } from "@/lib/navigation";
 
 export default function ArticleDetail() {
@@ -26,10 +26,13 @@ export default function ArticleDetail() {
   if (!article) return <MissingArticle onBack={() => setLocation("/inspiration")} />;
   
   const relatedArticles = articles.filter(item => item.id !== article.id && (item.category === article.category || item.serviceSlugs.some(slug => article.serviceSlugs.includes(slug)))).slice(0, 3);
-  const relatedServices = article.serviceSlugs.map(slug => {
-    const { service } = useService(slug);
-    return service;
-  }).filter(Boolean).slice(0, 3);
+  const relatedServices = article.serviceSlugs
+    .map(slug => {
+      const { service } = useService(slug);
+      return service;
+    })
+    .filter((s): s is ServicePackage => s !== null)
+    .slice(0, 3) as ServicePackage[];
   const relatedProjects = projects.filter(project => article.projectSlugs.includes(project.slug));
   
   const navigate = (label: string) => { const destination = resolveNavigation(label); if (destination) { setLocation(destination); return; } toast(`${label} is part of the next Concordvest release.`); };

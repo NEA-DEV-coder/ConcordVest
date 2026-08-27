@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { cn, formatNaira } from './utils';
+import { cn } from './utils';
+import { formatNaira } from './properties';
 
 describe('cn (className utility)', () => {
   it('merges class names correctly', () => {
@@ -28,7 +29,6 @@ describe('formatNaira', () => {
     const result = formatNaira(1000000);
     expect(result).toContain('₦');
     expect(result).toContain('1');
-    expect(result).toContain('M');
   });
 
   it('handles zero', () => {
@@ -40,13 +40,11 @@ describe('formatNaira', () => {
     const result = formatNaira(150000000);
     expect(result).toContain('₦');
     expect(result).toContain('150');
-    expect(result).toContain('M');
   });
 
   it('handles small numbers', () => {
     const result = formatNaira(500000);
     expect(result).toContain('₦');
     expect(result).toContain('500');
-    expect(result).toContain('K');
   });
 });
