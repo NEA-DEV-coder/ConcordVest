@@ -10,11 +10,12 @@ import { Footer, ArticleCard } from "@/components/Editorial";
 import { servicePackages } from "@/lib/services";
 import { resolveNavigation } from "@/lib/navigation";
 
+// Development/demo images - for production, these should be replaced with Supabase Storage URLs
 const asset = {
-  hero: "/manus-storage/concordvest-hero_a234c846.jpg",
-  property: "/manus-storage/concordvest-property_ef36ee68.jpg",
-  kitchen: "/manus-storage/concordvest-kitchen_fd650693.jpg",
-  project: "/manus-storage/concordvest-project_00304348.jpg",
+  hero: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1800&q=85",
+  property: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=85",
+  kitchen: "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=85",
+  project: "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=85",
 };
 
 const unsplash = {

@@ -38,7 +38,7 @@ export default function ProjectsHub() {
                 <BrandButton className="mt-9" onClick={() => setLocation("/services/custom-renovation")}>Start your project</BrandButton>
               </div>
               <div className="relative aspect-[1.1/0.86] overflow-hidden border border-white/18">
-                <img src="/manus-storage/concordvest-project_00304348.jpg" alt="Concordvest project archive" className="h-full w-full object-cover opacity-75" />
+                <img src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=85" alt="Concordvest project archive" className="h-full w-full object-cover opacity-75" />
                 <div className="absolute inset-0 bg-[#012770]/42" />
                 <div className="absolute inset-x-0 bottom-0 flex items-end justify-between border-t border-white/18 bg-[#012770]/70 p-5 sm:p-7"><p className="max-w-xs text-[0.76rem] leading-[1.6] text-white/78">Demo project archive · Abuja, Nigeria</p><ArrowDown size={20} className="text-[#ED7D01]" /></div>
               </div>

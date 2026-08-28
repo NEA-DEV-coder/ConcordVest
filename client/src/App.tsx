@@ -17,11 +17,13 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import Admin from "./pages/Admin";
+import AdminRegister from "./pages/AdminRegister";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/admin/register" component={AdminRegister} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/:section" component={Admin} />
       <Route path="/properties/:slug" component={PropertyDetail} />

@@ -1,12 +1,24 @@
 /**
  * ConcordVest Authentication Context
- * 
+ *
  * Provides authentication state and methods using Supabase Auth.
  * Replaces the localStorage-based fake admin authentication.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
-import { supabase, isSupabaseConfigured, type Profile, type UserRole } from "@/lib/supabase";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
+import {
+  supabase,
+  isSupabaseConfigured,
+  type Profile,
+  type UserRole,
+} from "@/lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
 // Auth state type
@@ -25,10 +37,16 @@ export interface AuthState {
 // Auth context type
 export interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
-  updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
+  updateProfile: (
+    updates: Partial<Profile>
+  ) => Promise<{ error: Error | null }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -67,55 +85,72 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>(defaultAuthState);
 
   // Fetch user profile
-  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
-    if (!isSupabaseConfigured()) {
-      return null;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (error) {
-        console.error("Error fetching profile:", error);
+  const fetchProfile = useCallback(
+    async (userId: string): Promise<Profile | null> => {
+      if (!isSupabaseConfigured()) {
         return null;
       }
 
-      return data;
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-      return null;
-    }
-  }, []);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching profile:", error);
+          return null;
+        }
+
+        return data;
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+        return null;
+      }
+    },
+    []
+  );
 
   // Update auth state
-  const updateAuthState = useCallback(async (session: Session | null) => {
-    if (!session?.user) {
+  const updateAuthState = useCallback(
+    async (session: Session | null) => {
+      if (!session?.user) {
+        setState({
+          ...defaultAuthState,
+          isLoading: false,
+        });
+        return;
+      }
+
+      const profile = await fetchProfile(session.user.id);
+
+      // Check if account is active. If deactivated, block auth and clean up token.
+      if (profile && profile.is_active === false) {
+        await supabase.auth.signOut();
+        setState({
+          ...defaultAuthState,
+          isLoading: false,
+        });
+        return;
+      }
+
+      const role = profile?.role || "user";
+
       setState({
-        ...defaultAuthState,
+        user: session.user,
+        profile,
+        session,
         isLoading: false,
+        isAuthenticated: true,
+        isAdmin: role === "admin",
+        isEditor: role === "admin" || role === "editor",
+        isStaff: role === "admin" || role === "editor" || role === "staff",
+        role,
       });
-      return;
-    }
-
-    const profile = await fetchProfile(session.user.id);
-    const role = profile?.role || "user";
-
-    setState({
-      user: session.user,
-      profile,
-      session,
-      isLoading: false,
-      isAuthenticated: true,
-      isAdmin: role === "admin",
-      isEditor: role === "admin" || role === "editor",
-      isStaff: role === "admin" || role === "editor" || role === "staff",
-      role,
-    });
-  }, [fetchProfile]);
+    },
+    [fetchProfile]
+  );
 
   // Initialize auth state
   useEffect(() => {
@@ -133,7 +168,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       updateAuthState(session);
     });
 
@@ -145,7 +182,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Sign in
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured()) {
-      return { error: new Error("Supabase is not configured. Please set up your environment variables.") };
+      return {
+        error: new Error(
+          "Supabase is not configured. Please set up your environment variables."
+        ),
+      };
     }
 
     try {
@@ -160,49 +201,82 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { error: null };
     } catch (error) {
-      return { error: error instanceof Error ? error : new Error("An unknown error occurred") };
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("An unknown error occurred"),
+      };
     }
   }, []);
 
   // Sign up
-  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
-    if (!isSupabaseConfigured()) {
-      return { error: new Error("Supabase is not configured. Please set up your environment variables.") };
-    }
-
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
-
-      if (error) {
-        return { error: new Error(error.message) };
+  const signUp = useCallback(
+    async (email: string, password: string, fullName?: string) => {
+      if (!isSupabaseConfigured()) {
+        return {
+          error: new Error(
+            "Supabase is not configured. Please set up your environment variables."
+          ),
+        };
       }
 
-      return { error: null };
-    } catch (error) {
-      return { error: error instanceof Error ? error : new Error("An unknown error occurred") };
-    }
-  }, []);
+      try {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+          },
+        });
+
+        if (error) {
+          return { error: new Error(error.message) };
+        }
+
+        // Explicitly sign out right after signup to clear any automatic sessions
+        await supabase.auth.signOut();
+
+        return { error: null };
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error
+              : new Error("An unknown error occurred"),
+        };
+      }
+    },
+    []
+  );
 
   // Sign out
   const signOut = useCallback(async () => {
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Supabase signOut error:", err);
+      }
     }
     setState(defaultAuthState);
+    setState({
+      ...defaultAuthState,
+      isLoading: false,
+    });
   }, []);
 
   // Reset password
   const resetPassword = useCallback(async (email: string) => {
     if (!isSupabaseConfigured()) {
-      return { error: new Error("Supabase is not configured. Please set up your environment variables.") };
+      return {
+        error: new Error(
+          "Supabase is not configured. Please set up your environment variables."
+        ),
+      };
     }
 
     try {
@@ -216,52 +290,72 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { error: null };
     } catch (error) {
-      return { error: error instanceof Error ? error : new Error("An unknown error occurred") };
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("An unknown error occurred"),
+      };
     }
   }, []);
 
   // Update profile
-  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
-    if (!isSupabaseConfigured() || !state.user) {
-      return { error: new Error("Not authenticated") };
-    }
-
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        } as never)
-        .eq("id", state.user.id);
-
-      if (error) {
-        return { error: new Error(error.message) };
+  const updateProfile = useCallback(
+    async (updates: Partial<Profile>) => {
+      if (!isSupabaseConfigured() || !state.user) {
+        return { error: new Error("Not authenticated") };
       }
 
-      // Refresh profile
-      await refreshProfile();
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            ...updates,
+            updated_at: new Date().toISOString(),
+          } as never)
+          .eq("id", state.user.id);
 
-      return { error: null };
-    } catch (error) {
-      return { error: error instanceof Error ? error : new Error("An unknown error occurred") };
-    }
-  }, [state.user]);
+        if (error) {
+          return { error: new Error(error.message) };
+        }
+
+        // Refresh profile
+        await refreshProfile();
+
+        return { error: null };
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error
+              : new Error("An unknown error occurred"),
+        };
+      }
+    },
+    [state.user]
+  );
 
   // Refresh profile
   const refreshProfile = useCallback(async () => {
     if (state.user) {
       const profile = await fetchProfile(state.user.id);
+      if (profile && profile.is_active === false) {
+        await signOut();
+        return;
+      }
       setState(prev => ({
         ...prev,
         profile,
         role: profile?.role || "user",
         isAdmin: profile?.role === "admin",
         isEditor: profile?.role === "admin" || profile?.role === "editor",
-        isStaff: profile?.role === "admin" || profile?.role === "editor" || profile?.role === "staff",
+        isStaff:
+          profile?.role === "admin" ||
+          profile?.role === "editor" ||
+          profile?.role === "staff",
       }));
     }
-  }, [state.user, fetchProfile]);
+  }, [state.user, fetchProfile, signOut]);
 
   const value: AuthContextType = {
     ...state,
@@ -277,7 +371,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 }
 
 // Role check utilities
-export function hasRole(role: UserRole | null, requiredRole: UserRole): boolean {
+export function hasRole(
+  role: UserRole | null,
+  requiredRole: UserRole
+): boolean {
   const roleHierarchy: Record<UserRole, number> = {
     admin: 4,
     editor: 3,

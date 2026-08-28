@@ -36,5 +36,12 @@ export const seedAdminProjects: ProjectRecord[] = projects;
 export const seedAdminServices: ServicePackage[] = servicePackages;
 export const seedAdminArticles: ArticleRecord[] = articles;
 
-export function isAdminAuthenticated() { return typeof window !== "undefined" && window.localStorage.getItem("concordvest-admin-auth") === "demo-authenticated"; }
-export function setAdminAuthenticated(value: boolean) { if (typeof window === "undefined") return; if (value) window.localStorage.setItem("concordvest-admin-auth", "demo-authenticated"); else window.localStorage.removeItem("concordvest-admin-auth"); }
+export function isAdminAuthenticated() {
+  if (process.env.NODE_ENV === 'production') return false;
+  return typeof window !== "undefined" && window.localStorage.getItem("concordvest-admin-auth") === "demo-authenticated";
+}
+export function setAdminAuthenticated(value: boolean) {
+  if (process.env.NODE_ENV === 'production' || typeof window === "undefined") return;
+  if (value) window.localStorage.setItem("concordvest-admin-auth", "demo-authenticated");
+  else window.localStorage.removeItem("concordvest-admin-auth");
+}

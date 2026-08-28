@@ -272,35 +272,88 @@ ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.articles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 
+-- ============================================================================
+-- RLS HELPER FUNCTION
+-- Uses SECURITY DEFINER to bypass RLS and avoid recursion
+-- ============================================================================
+
+-- Get the current user's role without triggering RLS
+-- This is the ONLY function that reads from profiles and bypasses RLS
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS user_role
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    user_role_val user_role;
+BEGIN
+    SELECT role INTO user_role_val
+    FROM public.profiles
+    WHERE id = auth.uid();
+    
+    RETURN COALESCE(user_role_val, 'user'::user_role);
+END;
+$$;
+
+-- Grant to authenticated users only
+GRANT EXECUTE ON FUNCTION public.get_user_role() TO authenticated;
+
+-- ============================================================================
+-- TRIGGER TO PREVENT UNAUTHORIZED ROLE CHANGES
+-- Enforced at database level, not via RLS policy
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.prevent_unauthorized_role_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    current_user_role user_role;
+BEGIN
+    -- Only check if the role column is being changed
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+        -- Get the current user's role using the helper function
+        current_user_role := public.get_user_role();
+        
+        -- Only admins can change roles
+        IF current_user_role != 'admin'::user_role THEN
+            RAISE EXCEPTION 'Only administrators can change user roles';
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+-- Create the trigger to enforce role change restrictions
+CREATE TRIGGER prevent_role_escalation
+    BEFORE UPDATE OF role ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.prevent_unauthorized_role_change();
+
 -- ---------------------------------------------------------------------------
 -- PROFILES RLS POLICIES
+-- These policies do NOT query the profiles table to avoid recursion
 -- ---------------------------------------------------------------------------
 
 -- Users can view their own profile
 CREATE POLICY "Users can view own profile" ON public.profiles
     FOR SELECT USING (auth.uid() = id);
 
--- Users can update their own profile
+-- Admins can view all profiles
+CREATE POLICY "Admins can view all profiles" ON public.profiles
+    FOR SELECT USING (public.get_user_role() = 'admin'::user_role);
+
+-- Users can update their own profile (role changes blocked by trigger)
 CREATE POLICY "Users can update own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
 
--- Admins can view all profiles
-CREATE POLICY "Admins can view all profiles" ON public.profiles
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
-
 -- Admins can update all profiles
 CREATE POLICY "Admins can update all profiles" ON public.profiles
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR UPDATE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ---------------------------------------------------------------------------
 -- PROPERTIES RLS POLICIES
@@ -312,39 +365,19 @@ CREATE POLICY "Anyone can view published properties" ON public.properties
 
 -- Admins and editors can view all properties
 CREATE POLICY "Admins and editors can view all properties" ON public.properties
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR SELECT USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can insert properties
 CREATE POLICY "Admins and editors can insert properties" ON public.properties
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR INSERT WITH CHECK (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can update properties
 CREATE POLICY "Admins and editors can update properties" ON public.properties
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR UPDATE USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins can delete properties
 CREATE POLICY "Admins can delete properties" ON public.properties
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR DELETE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ---------------------------------------------------------------------------
 -- PROJECTS RLS POLICIES
@@ -356,39 +389,19 @@ CREATE POLICY "Anyone can view published projects" ON public.projects
 
 -- Admins and editors can view all projects
 CREATE POLICY "Admins and editors can view all projects" ON public.projects
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR SELECT USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can insert projects
 CREATE POLICY "Admins and editors can insert projects" ON public.projects
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR INSERT WITH CHECK (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can update projects
 CREATE POLICY "Admins and editors can update projects" ON public.projects
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR UPDATE USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins can delete projects
 CREATE POLICY "Admins can delete projects" ON public.projects
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR DELETE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ---------------------------------------------------------------------------
 -- SERVICES RLS POLICIES
@@ -400,39 +413,19 @@ CREATE POLICY "Anyone can view published services" ON public.services
 
 -- Admins and editors can view all services
 CREATE POLICY "Admins and editors can view all services" ON public.services
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR SELECT USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can insert services
 CREATE POLICY "Admins and editors can insert services" ON public.services
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR INSERT WITH CHECK (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can update services
 CREATE POLICY "Admins and editors can update services" ON public.services
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR UPDATE USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins can delete services
 CREATE POLICY "Admins can delete services" ON public.services
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR DELETE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ---------------------------------------------------------------------------
 -- ARTICLES RLS POLICIES
@@ -444,39 +437,19 @@ CREATE POLICY "Anyone can view published articles" ON public.articles
 
 -- Admins and editors can view all articles
 CREATE POLICY "Admins and editors can view all articles" ON public.articles
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR SELECT USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can insert articles
 CREATE POLICY "Admins and editors can insert articles" ON public.articles
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR INSERT WITH CHECK (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins and editors can update articles
 CREATE POLICY "Admins and editors can update articles" ON public.articles
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
-    );
+    FOR UPDATE USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role));
 
 -- Admins can delete articles
 CREATE POLICY "Admins can delete articles" ON public.articles
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR DELETE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ---------------------------------------------------------------------------
 -- LEADS RLS POLICIES
@@ -484,35 +457,22 @@ CREATE POLICY "Admins can delete articles" ON public.articles
 
 -- Staff, editors, and admins can view leads
 CREATE POLICY "Staff can view leads" ON public.leads
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor', 'staff')
-        )
-    );
+    FOR SELECT USING (public.get_user_role() IN ('admin'::user_role, 'editor'::user_role, 'staff'::user_role));
 
 -- Anyone can insert leads (public form submission)
 CREATE POLICY "Anyone can insert leads" ON public.leads
     FOR INSERT WITH CHECK (TRUE);
 
--- Staff can update leads they are assigned to
+-- Staff can update leads they are assigned to, editors/admins can update any
 CREATE POLICY "Staff can update assigned leads" ON public.leads
     FOR UPDATE USING (
-        assigned_to = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role IN ('admin', 'editor')
-        )
+        assigned_to = auth.uid() 
+        OR public.get_user_role() IN ('admin'::user_role, 'editor'::user_role)
     );
 
 -- Admins can delete leads
 CREATE POLICY "Admins can delete leads" ON public.leads
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR DELETE USING (public.get_user_role() = 'admin'::user_role);
 
 -- ============================================================================
 -- STORAGE BUCKETS

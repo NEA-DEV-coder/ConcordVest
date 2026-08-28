@@ -1,8 +1,8 @@
 /**
  * ConcordVest Supabase Client Configuration
- * 
+ *
  * This module provides a configured Supabase client for the application.
- * 
+ *
  * SECURITY NOTES:
  * - Only VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are exposed to the client
  * - The anon key is safe to expose - it's protected by Row Level Security (RLS)
@@ -28,6 +28,7 @@ export type Database = {
           phone: string | null;
           avatar_url: string | null;
           role: "admin" | "editor" | "staff" | "user";
+          is_active: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -38,6 +39,7 @@ export type Database = {
           phone?: string | null;
           avatar_url?: string | null;
           role?: "admin" | "editor" | "staff" | "user";
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -48,6 +50,7 @@ export type Database = {
           phone?: string | null;
           avatar_url?: string | null;
           role?: "admin" | "editor" | "staff" | "user";
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -349,6 +352,9 @@ export type Database = {
           status: string;
           notes: string | null;
           assigned_to: string | null;
+          preferred_date: string | null;
+          preferred_time: string | null;
+          is_read: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -367,6 +373,9 @@ export type Database = {
           status?: string;
           notes?: string | null;
           assigned_to?: string | null;
+          preferred_date?: string | null;
+          preferred_time?: string | null;
+          is_read?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -385,6 +394,9 @@ export type Database = {
           status?: string;
           notes?: string | null;
           assigned_to?: string | null;
+          preferred_date?: string | null;
+          preferred_time?: string | null;
+          is_read?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -398,7 +410,14 @@ export type Database = {
     };
     Enums: {
       user_role: "admin" | "editor" | "staff" | "user";
-      lead_status: "new" | "contacted" | "qualified" | "appointment" | "converted" | "closed" | "archived";
+      lead_status:
+        | "new"
+        | "contacted"
+        | "qualified"
+        | "appointment"
+        | "converted"
+        | "closed"
+        | "archived";
       property_availability: "available" | "reserved" | "sold";
     };
   };
@@ -427,7 +446,10 @@ if (isSupabaseConfigured()) {
 } else {
   // Create a dummy client that won't be used but satisfies TypeScript
   // When not configured, the app will use demo data
-  supabaseClient = createClient<Database>("https://placeholder.supabase.co", "placeholder-key");
+  supabaseClient = createClient<Database>(
+    "https://placeholder.supabase.co",
+    "placeholder-key"
+  );
 }
 
 export const supabase = supabaseClient;
@@ -441,14 +463,16 @@ export type Article = Database["public"]["Tables"]["articles"]["Row"];
 export type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
-export type PropertyInsert = Database["public"]["Tables"]["properties"]["Insert"];
+export type PropertyInsert =
+  Database["public"]["Tables"]["properties"]["Insert"];
 export type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
 export type ServiceInsert = Database["public"]["Tables"]["services"]["Insert"];
 export type ArticleInsert = Database["public"]["Tables"]["articles"]["Insert"];
 export type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
 
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
-export type PropertyUpdate = Database["public"]["Tables"]["properties"]["Update"];
+export type PropertyUpdate =
+  Database["public"]["Tables"]["properties"]["Update"];
 export type ProjectUpdate = Database["public"]["Tables"]["projects"]["Update"];
 export type ServiceUpdate = Database["public"]["Tables"]["services"]["Update"];
 export type ArticleUpdate = Database["public"]["Tables"]["articles"]["Update"];
@@ -456,4 +480,5 @@ export type LeadUpdate = Database["public"]["Tables"]["leads"]["Update"];
 
 export type UserRole = Database["public"]["Enums"]["user_role"];
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
-export type PropertyAvailability = Database["public"]["Enums"]["property_availability"];
+export type PropertyAvailability =
+  Database["public"]["Enums"]["property_availability"];
