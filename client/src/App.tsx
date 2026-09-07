@@ -11,6 +11,7 @@ import ArticleDetail from "./pages/ArticleDetail";
 import ServicesHub from "./pages/ServicesHub";
 import ServiceDetail from "./pages/ServiceDetail";
 import SiteInspection from "./pages/SiteInspection";
+import StartBuildingProject from "./pages/StartBuildingProject";
 import { MobileWhatsAppCta } from "./components/WhatsAppAgentButton";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/admin/register" component={AdminRegister} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/:section" component={Admin} />
+      <Route path="/start-building-project" component={StartBuildingProject} />
       <Route path="/properties/:slug" component={PropertyDetail} />
       <Route path="/properties" component={PropertyDiscovery} />
       <Route path="/services/site-inspection" component={SiteInspection} />

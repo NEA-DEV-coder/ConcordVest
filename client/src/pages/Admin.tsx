@@ -2788,6 +2788,13 @@ function LeadsSection() {
     }
   };
 
+  const getInterestBadgeClass = (interestType: string) => {
+    if (interestType === "Building Project") {
+      return "inline-block px-2 py-0.5 text-[0.6rem] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300";
+    }
+    return "inline-block px-2 py-0.5 text-[0.6rem] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700";
+  };
+
   if (isLoading) {
     return <LoadingState />;
   }
@@ -2840,6 +2847,7 @@ function LeadsSection() {
           className="form-input w-full"
         >
           <option value="All">All Interest Types</option>
+          <option value="Building Project">Building Project</option>
           <option value="Property Enquiry">Property Enquiry</option>
           <option value="Viewing Request">Viewing Request</option>
           <option value="Renovation Quote">Renovation Quote</option>
@@ -2908,7 +2916,11 @@ function LeadsSection() {
                         {row.name}
                       </div>
                     </td>
-                    <td>{row.interestType}</td>
+                    <td>
+                      <span className={getInterestBadgeClass(row.interestType)}>
+                        {row.interestType}
+                      </span>
+                    </td>
                     <td>{row.property || row.service || "—"}</td>
                     <td>
                       {row.preferredDate ? (
@@ -2975,7 +2987,11 @@ function LeadsSection() {
                   {selectedLead.name}
                 </h3>
                 <p className="text-xs text-[#637085] mt-1">
-                  {selectedLead.interestType}
+                  <span
+                    className={getInterestBadgeClass(selectedLead.interestType)}
+                  >
+                    {selectedLead.interestType}
+                  </span>
                 </p>
               </div>
               <button

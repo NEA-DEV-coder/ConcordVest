@@ -14,7 +14,8 @@ export type LeadInterestType =
   | "Viewing Request"
   | "Renovation Quote"
   | "Site Inspection"
-  | "Agent Conversation";
+  | "Agent Conversation"
+  | "Building Project";
 
 export type LeadSource =
   | "Instagram"
@@ -35,9 +36,9 @@ export interface LeadPayload {
   email: string;
   interestType: LeadInterestType;
   propertyId?: string; // UUID from database
-  serviceId?: string;  // UUID from database
-  property?: string;   // Display name
-  service?: string;    // Display name
+  serviceId?: string; // UUID from database
+  property?: string; // Display name
+  service?: string; // Display name
   message: string;
   source: LeadSource;
   page: string;
@@ -60,10 +61,14 @@ export interface LeadContext {
   serviceName?: string;
 }
 
-const configuredWhatsAppNumber = import.meta.env.VITE_CONCORDVEST_WHATSAPP_NUMBER as string | undefined;
-export const CONCORDVEST_WHATSAPP_NUMBER = configuredWhatsAppNumber?.replace(/\D/g, "") || "";
+const configuredWhatsAppNumber = import.meta.env
+  .VITE_CONCORDVEST_WHATSAPP_NUMBER as string | undefined;
+export const CONCORDVEST_WHATSAPP_NUMBER =
+  configuredWhatsAppNumber?.replace(/\D/g, "") || "";
 
-export function getLeadContext(overrides: Partial<LeadContext> = {}): LeadContext {
+export function getLeadContext(
+  overrides: Partial<LeadContext> = {}
+): LeadContext {
   const params = new URLSearchParams(window.location.search);
   const sourceParam = params.get("source")?.toLowerCase();
   const sourceMap: Record<string, LeadSource> = {
@@ -82,10 +87,10 @@ export function getLeadContext(overrides: Partial<LeadContext> = {}): LeadContex
     (referrer.includes("instagram")
       ? "Instagram"
       : referrer.includes("facebook")
-      ? "Facebook"
-      : referrer.includes("google")
-      ? "Google"
-      : "Direct");
+        ? "Facebook"
+        : referrer.includes("google")
+          ? "Google"
+          : "Direct");
 
   return {
     page: window.location.href,
@@ -123,14 +128,23 @@ export function buildPropertyWhatsAppMessage(propertyName: string) {
   return `Hello Concordvest, I'm interested in ${propertyName}. I found it through your website and would like more information.`;
 }
 
-export function buildViewingWhatsAppMessage(propertyName: string, date: string, time: string) {
+export function buildViewingWhatsAppMessage(
+  propertyName: string,
+  date: string,
+  time: string
+) {
   return `Hello Concordvest, I would like to request a viewing for ${propertyName}. My preferred time is ${date} at ${time}. I found it through your website.`;
 }
 
 export function recordLead(lead: LeadPayload) {
   try {
-    const existing = JSON.parse(window.localStorage.getItem("concordvest-leads") || "[]") as LeadPayload[];
-    window.localStorage.setItem("concordvest-leads", JSON.stringify([...existing, lead]));
+    const existing = JSON.parse(
+      window.localStorage.getItem("concordvest-leads") || "[]"
+    ) as LeadPayload[];
+    window.localStorage.setItem(
+      "concordvest-leads",
+      JSON.stringify([...existing, lead])
+    );
   } catch {
     // Fail silently in private/incognito modes
   }
@@ -171,4 +185,24 @@ export function buildLeadWhatsAppMessage(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export function buildBuildingProjectWhatsAppMessage(params: {
+  name: string;
+  buildingType: string;
+  landStatus: string;
+  stage: string;
+  budget: string;
+}) {
+  return [
+    "Hello Concordvest, I just submitted a Building Project assessment.",
+    "",
+    `Name: ${params.name}`,
+    `Project: ${params.buildingType}`,
+    `Land: ${params.landStatus}`,
+    `Stage: ${params.stage}`,
+    `Budget: ${params.budget || "To discuss"}`,
+    "",
+    "I would like to speak with an agent about next steps.",
+  ].join("\n");
 }

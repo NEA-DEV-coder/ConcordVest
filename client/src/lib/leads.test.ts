@@ -8,7 +8,7 @@ import {
   leadDbToPayload,
   submitLead,
 } from "../hooks/useLeads";
-import { type LeadPayload } from "./leads";
+import { type LeadPayload, buildBuildingProjectWhatsAppMessage } from "./leads";
 import { type Lead } from "./supabase";
 
 describe("leadPayloadToDb", () => {
@@ -164,5 +164,65 @@ describe("submitLead Validations", () => {
     const result = await submitLead(payload);
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain("valid email address");
+  });
+});
+
+describe("Building Project Lead & WhatsApp formatting", () => {
+  it("converts Building Project lead payload to db record correctly", () => {
+    const payload: LeadPayload = {
+      id: "test-building-id",
+      name: "Ibrahim Abubakar",
+      email: "ibrahim@example.com",
+      phone: "08012345678",
+      whatsapp: "08012345678",
+      interestType: "Building Project",
+      message:
+        "[BUILDING PROJECT CONSULTATION]\nBuilding Type: Residential Home\nLand Status: Yes, I already have land",
+      source: "Direct",
+      page: "/start-building-project",
+      date: new Date().toISOString(),
+      status: "New",
+      isRead: false,
+    };
+
+    const dbRecord = leadPayloadToDb(payload, true);
+    expect(dbRecord.interest_type).toBe("Building Project");
+    expect(dbRecord.page_url).toBe("/start-building-project");
+    expect(dbRecord.source).toBe("Direct");
+    expect(dbRecord.message).toContain("[BUILDING PROJECT CONSULTATION]");
+  });
+
+  it("builds concise, correctly formatted WhatsApp message for building project", () => {
+    const message = buildBuildingProjectWhatsAppMessage({
+      name: "Ibrahim Abubakar",
+      buildingType: "Residential Home",
+      landStatus: "Yes, I already have land",
+      stage: "I have architectural drawings/plans",
+      budget: "₦100M – ₦250M",
+    });
+
+    expect(message).toContain(
+      "Hello Concordvest, I just submitted a Building Project assessment."
+    );
+    expect(message).toContain("Name: Ibrahim Abubakar");
+    expect(message).toContain("Project: Residential Home");
+    expect(message).toContain("Land: Yes, I already have land");
+    expect(message).toContain("Stage: I have architectural drawings/plans");
+    expect(message).toContain("Budget: ₦100M – ₦250M");
+    expect(message).toContain(
+      "I would like to speak with an agent about next steps."
+    );
+  });
+
+  it("handles empty budget gracefully in WhatsApp message", () => {
+    const message = buildBuildingProjectWhatsAppMessage({
+      name: "Fatima Danjuma",
+      buildingType: "Commercial Building",
+      landStatus: "No, I need help finding land",
+      stage: "Just an idea",
+      budget: "",
+    });
+
+    expect(message).toContain("Budget: To discuss");
   });
 });

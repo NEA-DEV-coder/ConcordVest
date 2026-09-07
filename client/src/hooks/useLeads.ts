@@ -1,14 +1,25 @@
 /**
  * ConcordVest Leads Data Hooks
- * 
+ *
  * Provides hooks for fetching, submitting, and managing leads/enquiries.
  * Supabase is the primary production database and source of truth.
  * Falls back to localStorage only when Supabase is unconfigured (demo/dev mode).
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, isSupabaseConfigured, type Lead, type LeadInsert, type LeadUpdate } from "@/lib/supabase";
-import { createLead, recordLead, type LeadPayload, type LeadStatus } from "@/lib/leads";
+import {
+  supabase,
+  isSupabaseConfigured,
+  type Lead,
+  type LeadInsert,
+  type LeadUpdate,
+} from "@/lib/supabase";
+import {
+  createLead,
+  recordLead,
+  type LeadPayload,
+  type LeadStatus,
+} from "@/lib/leads";
 
 // Simple email regex for validation
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -16,7 +27,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * Convert LeadPayload (app camelCase) to LeadInsert (database snake_case)
  */
-export function leadPayloadToDb(payload: LeadPayload, isNew: boolean = false): LeadInsert {
+export function leadPayloadToDb(
+  payload: LeadPayload,
+  isNew: boolean = false
+): LeadInsert {
   const dbRecord: LeadInsert = {
     name: payload.name.trim(),
     email: payload.email.trim().toLowerCase(),
@@ -28,7 +42,14 @@ export function leadPayloadToDb(payload: LeadPayload, isNew: boolean = false): L
     message: payload.message.trim(),
     source: payload.source,
     page_url: payload.page,
-    status: payload.status.toLowerCase() as "new" | "contacted" | "qualified" | "appointment" | "converted" | "closed" | "archived",
+    status: payload.status.toLowerCase() as
+      | "new"
+      | "contacted"
+      | "qualified"
+      | "appointment"
+      | "converted"
+      | "closed"
+      | "archived",
     notes: payload.notes || null,
     assigned_to: payload.assignedTo || null,
     preferred_date: payload.preferredDate || null,
@@ -37,7 +58,13 @@ export function leadPayloadToDb(payload: LeadPayload, isNew: boolean = false): L
   };
 
   // Only include id if it's a valid UUID (for updates), not for new records
-  if (!isNew && payload.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id)) {
+  if (
+    !isNew &&
+    payload.id &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      payload.id
+    )
+  ) {
     dbRecord.id = payload.id;
   }
 
@@ -53,7 +80,7 @@ export function leadDbToPayload(
   serviceNameMap?: Record<string, string>
 ): LeadPayload {
   const dbStatus = lead.status.toLowerCase();
-  
+
   // Map database status string back to LeadStatus enum
   let mappedStatus: LeadStatus = "New";
   if (dbStatus === "new") mappedStatus = "New";
@@ -73,8 +100,10 @@ export function leadDbToPayload(
     interestType: lead.interest_type as LeadPayload["interestType"],
     propertyId: lead.property_id || undefined,
     serviceId: lead.service_id || undefined,
-    property: (lead.property_id && propertyNameMap?.[lead.property_id]) || undefined,
-    service: (lead.service_id && serviceNameMap?.[lead.service_id]) || undefined,
+    property:
+      (lead.property_id && propertyNameMap?.[lead.property_id]) || undefined,
+    service:
+      (lead.service_id && serviceNameMap?.[lead.service_id]) || undefined,
     message: lead.message,
     source: lead.source as LeadPayload["source"],
     page: lead.page_url,
@@ -96,19 +125,39 @@ export async function submitLead(
 ): Promise<{ success: boolean; leadId: string; error: Error | null }> {
   // 1. Validation
   if (!payload.name?.trim()) {
-    return { success: false, leadId: "", error: new Error("Name is required.") };
+    return {
+      success: false,
+      leadId: "",
+      error: new Error("Name is required."),
+    };
   }
   if (!payload.phone?.trim()) {
-    return { success: false, leadId: "", error: new Error("Phone number is required.") };
+    return {
+      success: false,
+      leadId: "",
+      error: new Error("Phone number is required."),
+    };
   }
   if (!payload.email?.trim()) {
-    return { success: false, leadId: "", error: new Error("Email address is required.") };
+    return {
+      success: false,
+      leadId: "",
+      error: new Error("Email address is required."),
+    };
   }
   if (!EMAIL_REGEX.test(payload.email.trim())) {
-    return { success: false, leadId: "", error: new Error("Please enter a valid email address.") };
+    return {
+      success: false,
+      leadId: "",
+      error: new Error("Please enter a valid email address."),
+    };
   }
   if (!payload.interestType) {
-    return { success: false, leadId: "", error: new Error("Interest type is required.") };
+    return {
+      success: false,
+      leadId: "",
+      error: new Error("Interest type is required."),
+    };
   }
 
   const newLead = createLead(payload);
@@ -122,33 +171,34 @@ export async function submitLead(
   try {
     // Submit to Supabase - omit ID so PostgreSQL generates it
     const dbPayload = leadPayloadToDb(newLead, true);
-    
-    const { data, error } = await supabase
-      .from("leads")
-      .insert(dbPayload as never)
-      .select("id")
-      .single();
+
+    const { error } = await supabase.from("leads").insert(dbPayload as never);
 
     if (error) {
       console.error("Failed to save lead to Supabase:", error);
-      return { success: false, leadId: "", error: new Error(error.message) };
+      return {
+        success: false,
+        leadId: "",
+        error: new Error(error.message),
+      };
     }
 
-    const uuid = (data as { id: string })?.id;
-    if (!uuid) {
-      return { success: false, leadId: "", error: new Error("Failed to retrieve generated lead ID.") };
-    }
+    recordLead(newLead);
 
-    // Save local copy for historical audit/debug
-    recordLead({ ...newLead, id: uuid });
-
-    return { success: true, leadId: uuid, error: null };
+    return {
+      success: true,
+      leadId: newLead.id,
+      error: null,
+    };
   } catch (error) {
     console.error("Failed to submit lead:", error);
     return {
       success: false,
       leadId: "",
-      error: error instanceof Error ? error : new Error("Unexpected connection error during submission"),
+      error:
+        error instanceof Error
+          ? error
+          : new Error("Unexpected connection error during submission"),
     };
   }
 }
@@ -161,9 +211,18 @@ export function useAdminLeads(): {
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  updateLeadStatus: (id: string, status: LeadUpdate["status"]) => Promise<{ error: Error | null }>;
-  updateLeadNotes: (id: string, notes: string) => Promise<{ error: Error | null }>;
-  assignLead: (id: string, assignedTo: string | null) => Promise<{ error: Error | null }>;
+  updateLeadStatus: (
+    id: string,
+    status: LeadUpdate["status"]
+  ) => Promise<{ error: Error | null }>;
+  updateLeadNotes: (
+    id: string,
+    notes: string
+  ) => Promise<{ error: Error | null }>;
+  assignLead: (
+    id: string,
+    assignedTo: string | null
+  ) => Promise<{ error: Error | null }>;
   markAsRead: (id: string) => Promise<{ error: Error | null }>;
   deleteLead: (id: string) => Promise<{ error: Error | null }>;
   unreadCount: number;
@@ -178,8 +237,14 @@ export function useAdminLeads(): {
 
     if (!isSupabaseConfigured()) {
       try {
-        const stored = JSON.parse(window.localStorage.getItem("concordvest-leads") || "[]") as LeadPayload[];
-        setLeads(stored.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        const stored = JSON.parse(
+          window.localStorage.getItem("concordvest-leads") || "[]"
+        ) as LeadPayload[];
+        setLeads(
+          stored.sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          )
+        );
       } catch {
         setLeads([]);
       }
@@ -249,16 +314,18 @@ export function useAdminLeads(): {
   }, [fetchLeads]);
 
   const updateLeadStatus = useCallback(
-    async (id: string, status: LeadUpdate["status"]): Promise<{ error: Error | null }> => {
+    async (
+      id: string,
+      status: LeadUpdate["status"]
+    ): Promise<{ error: Error | null }> => {
       if (!isSupabaseConfigured()) {
         setLeads(prev =>
           prev.map(l =>
             l.id === id
               ? {
                   ...l,
-                  status:
-                    ((status || "new").charAt(0).toUpperCase() +
-                      (status || "new").slice(1)) as LeadPayload["status"],
+                  status: ((status || "new").charAt(0).toUpperCase() +
+                    (status || "new").slice(1)) as LeadPayload["status"],
                 }
               : l
           )
@@ -282,7 +349,10 @@ export function useAdminLeads(): {
         await fetchLeads();
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to update status") };
+        return {
+          error:
+            err instanceof Error ? err : new Error("Failed to update status"),
+        };
       }
     },
     [fetchLeads]
@@ -311,16 +381,26 @@ export function useAdminLeads(): {
         await fetchLeads();
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to update notes") };
+        return {
+          error:
+            err instanceof Error ? err : new Error("Failed to update notes"),
+        };
       }
     },
     [fetchLeads]
   );
 
   const assignLead = useCallback(
-    async (id: string, assignedTo: string | null): Promise<{ error: Error | null }> => {
+    async (
+      id: string,
+      assignedTo: string | null
+    ): Promise<{ error: Error | null }> => {
       if (!isSupabaseConfigured()) {
-        setLeads(prev => prev.map(l => (l.id === id ? { ...l, assignedTo: assignedTo || undefined } : l)));
+        setLeads(prev =>
+          prev.map(l =>
+            l.id === id ? { ...l, assignedTo: assignedTo || undefined } : l
+          )
+        );
         return { error: null };
       }
 
@@ -340,7 +420,10 @@ export function useAdminLeads(): {
         await fetchLeads();
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to assign lead") };
+        return {
+          error:
+            err instanceof Error ? err : new Error("Failed to assign lead"),
+        };
       }
     },
     [fetchLeads]
@@ -349,7 +432,9 @@ export function useAdminLeads(): {
   const markAsRead = useCallback(
     async (id: string): Promise<{ error: Error | null }> => {
       if (!isSupabaseConfigured()) {
-        setLeads(prev => prev.map(l => (l.id === id ? { ...l, isRead: true } : l)));
+        setLeads(prev =>
+          prev.map(l => (l.id === id ? { ...l, isRead: true } : l))
+        );
         return { error: null };
       }
 
@@ -367,10 +452,17 @@ export function useAdminLeads(): {
         }
 
         // Fast update in local state to prevent visual lag
-        setLeads(prev => prev.map(l => (l.id === id ? { ...l, isRead: true } : l)));
+        setLeads(prev =>
+          prev.map(l => (l.id === id ? { ...l, isRead: true } : l))
+        );
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to mark lead as read") };
+        return {
+          error:
+            err instanceof Error
+              ? err
+              : new Error("Failed to mark lead as read"),
+        };
       }
     },
     []
@@ -396,7 +488,10 @@ export function useAdminLeads(): {
         setLeads(prev => prev.filter(l => l.id !== id));
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to delete lead") };
+        return {
+          error:
+            err instanceof Error ? err : new Error("Failed to delete lead"),
+        };
       }
     },
     []
@@ -459,15 +554,22 @@ export function useDashboardStats(): {
 
       setStats({
         totalProperties: demoProperties.length,
-        availableProperties: demoProperties.filter((p: any) => p.availability === "Available").length,
-        reservedSold: demoProperties.filter((p: any) => p.availability !== "Available").length,
+        availableProperties: demoProperties.filter(
+          (p: any) => p.availability === "Available"
+        ).length,
+        reservedSold: demoProperties.filter(
+          (p: any) => p.availability !== "Available"
+        ).length,
         totalProjects: projects.length,
         publishedArticles: articles.length,
         newLeads: adminLeads.filter((l: any) => l.status === "New").length,
         totalLeads: adminLeads.length,
-        renovationEnquiries: adminLeads.filter((l: any) => l.interest === "Renovation Quote").length,
+        renovationEnquiries: adminLeads.filter(
+          (l: any) => l.interest === "Renovation Quote"
+        ).length,
         siteInspections: adminLeads.filter(
-          (l: any) => l.interest === "Site Inspection" || l.interest === "Viewing Request"
+          (l: any) =>
+            l.interest === "Site Inspection" || l.interest === "Viewing Request"
         ).length,
       });
       setIsLoading(false);
@@ -487,15 +589,40 @@ export function useDashboardStats(): {
           renovationResult,
           inspectionsResult,
         ] = await Promise.all([
-          supabase.from("properties").select("id", { count: "exact", head: true }),
-          supabase.from("properties").select("id", { count: "exact", head: true }).eq("availability", "Available"),
-          supabase.from("properties").select("id", { count: "exact", head: true }).neq("availability", "Available"),
-          supabase.from("projects").select("id", { count: "exact", head: true }).eq("is_published", true),
-          supabase.from("articles").select("id", { count: "exact", head: true }).eq("is_published", true),
+          supabase
+            .from("properties")
+            .select("id", { count: "exact", head: true }),
+          supabase
+            .from("properties")
+            .select("id", { count: "exact", head: true })
+            .eq("availability", "Available"),
+          supabase
+            .from("properties")
+            .select("id", { count: "exact", head: true })
+            .neq("availability", "Available"),
+          supabase
+            .from("projects")
+            .select("id", { count: "exact", head: true })
+            .eq("is_published", true),
+          supabase
+            .from("articles")
+            .select("id", { count: "exact", head: true })
+            .eq("is_published", true),
           supabase.from("leads").select("id", { count: "exact", head: true }),
-          supabase.from("leads").select("id", { count: "exact", head: true }).eq("is_read", false),
-          supabase.from("leads").select("id", { count: "exact", head: true }).eq("interest_type", "Renovation Quote"),
-          supabase.from("leads").select("id", { count: "exact", head: true }).or("interest_type.eq.Site Inspection,interest_type.eq.Viewing Request"),
+          supabase
+            .from("leads")
+            .select("id", { count: "exact", head: true })
+            .eq("is_read", false),
+          supabase
+            .from("leads")
+            .select("id", { count: "exact", head: true })
+            .eq("interest_type", "Renovation Quote"),
+          supabase
+            .from("leads")
+            .select("id", { count: "exact", head: true })
+            .or(
+              "interest_type.eq.Site Inspection,interest_type.eq.Viewing Request"
+            ),
         ]);
 
         setStats({
@@ -511,7 +638,11 @@ export function useDashboardStats(): {
         });
       } catch (err) {
         console.error("Error loading dashboard stats:", err);
-        setError(err instanceof Error ? err : new Error("Failed to fetch dashboard stats"));
+        setError(
+          err instanceof Error
+            ? err
+            : new Error("Failed to fetch dashboard stats")
+        );
       } finally {
         setIsLoading(false);
       }
