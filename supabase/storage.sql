@@ -20,13 +20,13 @@ VALUES (
     'properties',
     'properties',
     TRUE,
-    5242880, -- 5 MB max file size
-    ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    52428800, -- 50 MB max file size (supports images and video tours)
+    ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime']
 )
 ON CONFLICT (id) DO UPDATE SET
     public = TRUE,
-    file_size_limit = 5242880,
-    allowed_mime_types = ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    file_size_limit = 52428800,
+    allowed_mime_types = ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
 
 -- 2. Clean up existing / legacy policies on storage.objects for properties bucket
 DROP POLICY IF EXISTS "Public Access Properties Images" ON storage.objects;

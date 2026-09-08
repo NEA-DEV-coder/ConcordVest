@@ -1,9 +1,10 @@
 /* CONCORDVEST / Quiet Structure: property detail is an editorial address dossier—cinematic gallery first, structured facts second, and a clear path to human contact. */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRoute, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowUpRight,
   Bath,
@@ -93,7 +94,10 @@ function PropertyDetailContent({
   const [activeImage, setActiveImage] = useState(0);
   const [enquiryOpen, setEnquiryOpen] = useState(false);
   const [viewingOpen, setViewingOpen] = useState(false);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const hasVideo = Boolean(property.video && property.video.trim());
 
   // Fetch all properties for related sections
   const { properties } = useProperties();
@@ -283,25 +287,45 @@ function PropertyDetailContent({
                   />
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() =>
-                  toast("Video tour placeholder", {
-                    description:
-                      "A property walkthrough will be added when video inventory is connected.",
-                  })
-                }
-                className="flex h-16 shrink-0 items-center gap-2 border border-dashed border-white/35 px-4 text-left text-[0.58rem] font-extrabold uppercase tracking-[0.12em] text-white sm:h-20"
-              >
-                <span className="grid h-7 w-7 place-items-center bg-[#ED7D01] text-[#012770]">
-                  <Play size={13} fill="currentColor" />
-                </span>
-                <span>
-                  Video tour
-                  <br />
-                  <em className="not-italic text-white/50">Placeholder</em>
-                </span>
-              </button>
+              {hasVideo ? (
+                <button
+                  type="button"
+                  aria-label="Open property video tour"
+                  onClick={() => setVideoModalOpen(true)}
+                  className="flex h-16 shrink-0 items-center gap-2 border border-[#ED7D01]/80 bg-white/10 px-4 text-left text-[0.58rem] font-extrabold uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ED7D01] hover:bg-white/15 sm:h-20"
+                >
+                  <span className="grid h-7 w-7 place-items-center bg-[#ED7D01] text-[#012770] shadow-sm">
+                    <Play size={13} fill="currentColor" />
+                  </span>
+                  <span>
+                    Video Tour
+                    <br />
+                    <span className="font-semibold text-[#ED7D01]">
+                      Watch walkthrough
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    toast("Video tour placeholder", {
+                      description:
+                        "A property walkthrough will be added when video inventory is connected.",
+                    })
+                  }
+                  className="flex h-16 shrink-0 items-center gap-2 border border-dashed border-white/35 px-4 text-left text-[0.58rem] font-extrabold uppercase tracking-[0.12em] text-white sm:h-20"
+                >
+                  <span className="grid h-7 w-7 place-items-center bg-[#ED7D01] text-[#012770]">
+                    <Play size={13} fill="currentColor" />
+                  </span>
+                  <span>
+                    Video tour
+                    <br />
+                    <em className="not-italic text-white/50">Placeholder</em>
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </section>
@@ -569,6 +593,13 @@ function PropertyDetailContent({
           onClose={() => setViewingOpen(false)}
         />
       )}
+      {videoModalOpen && hasVideo && (
+        <VideoTourModal
+          videoUrl={property.video}
+          title={property.title}
+          onClose={() => setVideoModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -696,6 +727,111 @@ function GalleryOverlay({
       >
         <ChevronRight size={19} />
       </button>
+    </div>
+  );
+}
+
+function VideoTourModal({
+  videoUrl,
+  title,
+  onClose,
+}: {
+  videoUrl: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const [loadError, setLoadError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Browser autoplay policy requires muted playback
+    video.defaultMuted = true;
+    video.muted = true;
+
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Autoplay blocked by browser policy; user can click play via controls
+      });
+    }
+  }, [videoUrl]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Video tour for ${title}`}
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-[#012770]/95 p-4 sm:p-6 md:p-10"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Close video tour"
+        onClick={onClose}
+        className="absolute right-4 top-4 z-10 grid h-10 w-10 place-items-center border border-white/30 bg-[#012770]/80 text-white transition-colors hover:border-[#ED7D01] hover:text-[#ED7D01] sm:right-6 sm:top-6"
+      >
+        <X size={18} />
+      </button>
+
+      <div className="relative flex w-full max-w-4xl flex-col overflow-hidden border border-white/20 bg-black shadow-2xl">
+        {/* Header bar */}
+        <div className="flex items-center justify-between border-b border-white/10 bg-[#012770] px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            <span className="grid h-5 w-5 place-items-center bg-[#ED7D01] text-[#012770]">
+              <Play size={10} fill="currentColor" />
+            </span>
+            <span className="text-[0.68rem] font-extrabold uppercase tracking-[0.14em] text-white">
+              Video Tour · {title}
+            </span>
+          </div>
+          <span className="text-[0.55rem] font-bold uppercase tracking-[0.1em] text-white/60">
+            ConcordVest Walkthrough
+          </span>
+        </div>
+
+        {/* Video Player Container */}
+        <div className="relative aspect-video w-full bg-black">
+          {loadError ? (
+            <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-white">
+              <AlertCircle size={32} className="text-[#ED7D01]" />
+              <p className="mt-3 text-sm font-bold">
+                Video walkthrough is currently unavailable
+              </p>
+              <p className="mt-1 text-xs text-white/60">
+                Please check back later or contact ConcordVest for a personal
+                walkthrough.
+              </p>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              autoPlay
+              muted
+              playsInline
+              controls
+              preload="metadata"
+              onError={() => setLoadError(true)}
+              className="h-full w-full object-contain"
+            >
+              Your browser does not support video playback.
+            </video>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

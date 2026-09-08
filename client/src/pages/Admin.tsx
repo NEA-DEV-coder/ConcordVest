@@ -34,6 +34,7 @@ import {
   Trash2,
   Upload,
   Users,
+  Video,
   X,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -88,6 +89,10 @@ import {
   deletePropertyImage,
   validateImageFile,
   DEFAULT_PROPERTY_IMAGE,
+  uploadPropertyVideo,
+  deletePropertyVideo,
+  validateVideoFile,
+  MAX_VIDEO_FILE_SIZE,
 } from "@/lib/storage";
 
 const navy = "#012770";
@@ -564,6 +569,7 @@ function PropertiesSection() {
           notify={notify}
           createProperty={createProperty}
           updateProperty={updateProperty}
+          deleteProperty={deleteProperty}
         />
       )}
     </div>
@@ -602,12 +608,21 @@ interface ImageEntry {
   isNew: boolean;
 }
 
+interface VideoEntry {
+  url: string;
+  file?: File;
+  isNew: boolean;
+  fileName?: string;
+  fileSize?: number;
+}
+
 function PropertyEditor({
   property,
   onClose,
   notify,
   createProperty,
   updateProperty,
+  deleteProperty,
 }: {
   property: PropertyRecord;
   onClose: () => void;
@@ -619,6 +634,7 @@ function PropertyEditor({
     id: string,
     updates: any
   ) => Promise<{ error: Error | null }>;
+  deleteProperty: (id: string) => Promise<{ error: Error | null }>;
 }) {
   const [form, setForm] = useState(property);
   const [imageEntries, setImageEntries] = useState<ImageEntry[]>(() =>
@@ -629,10 +645,29 @@ function PropertyEditor({
     }))
   );
   const [removedUrls, setRemovedUrls] = useState<string[]>([]);
+  const [videoEntry, setVideoEntry] = useState<VideoEntry | null>(() => {
+    if (property.video && property.video.trim()) {
+      return {
+        url: property.video.trim(),
+        isNew: false,
+      };
+    }
+    return null;
+  });
+  const [removedVideoUrl, setRemovedVideoUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (videoEntry?.isNew && videoEntry.url.startsWith("blob:")) {
+        URL.revokeObjectURL(videoEntry.url);
+      }
+    };
+  }, [videoEntry]);
 
   const update = (
     key: keyof PropertyRecord,
@@ -674,6 +709,55 @@ function PropertyEditor({
     // Reset input so re-selecting the same file works
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setValidationError(null);
+
+    const validation = validateVideoFile(file);
+    if (!validation.valid) {
+      setValidationError(validation.error || "Invalid video file");
+      notify(validation.error || "Invalid video file");
+      if (videoInputRef.current) {
+        videoInputRef.current.value = "";
+      }
+      return;
+    }
+
+    // Queue existing saved video for cleanup upon successful save
+    if (videoEntry && !videoEntry.isNew && videoEntry.url) {
+      setRemovedVideoUrl(videoEntry.url);
+    } else if (videoEntry?.isNew && videoEntry.url.startsWith("blob:")) {
+      URL.revokeObjectURL(videoEntry.url);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setVideoEntry({
+      url: previewUrl,
+      file,
+      isNew: true,
+      fileName: file.name,
+      fileSize: file.size,
+    });
+
+    if (videoInputRef.current) {
+      videoInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    if (!videoEntry) return;
+    if (videoEntry.isNew && videoEntry.url.startsWith("blob:")) {
+      URL.revokeObjectURL(videoEntry.url);
+    } else if (!videoEntry.isNew && videoEntry.url) {
+      setRemovedVideoUrl(videoEntry.url);
+    }
+    setVideoEntry(null);
+    if (videoInputRef.current) {
+      videoInputRef.current.value = "";
     }
   };
 
@@ -725,6 +809,11 @@ function PropertyEditor({
     setIsSubmitting(true);
     setValidationError(null);
 
+    // Track state for rollback of newly created resources during THIS save attempt
+    let newlyCreatedPropertyId: string | null = null;
+    const newlyUploadedImageUrls: string[] = [];
+    let newlyUploadedVideoUrl: string | null = null;
+
     try {
       const isNewProperty = !property.id;
       let targetPropertyId = property.id;
@@ -735,6 +824,7 @@ function PropertyEditor({
         const { data: created, error: createError } = await createProperty({
           ...form,
           images: [],
+          video: "",
         });
 
         if (createError || !created) {
@@ -744,35 +834,137 @@ function PropertyEditor({
         }
 
         targetPropertyId = created.id;
+        newlyCreatedPropertyId = created.id; // Marked for rollback if subsequent operations fail
       }
 
-      // 2. Upload newly added image files to Supabase Storage: properties/{propertyId}/...
+      // 2. Identify new media files to upload
       const newEntries = imageEntries.filter(
         entry => entry.isNew && entry.file
       );
       const newFiles = newEntries.map(entry => entry.file!);
-      let uploadedUrls: string[] = [];
+      const hasNewImages = newFiles.length > 0;
+      const hasNewVideo = Boolean(videoEntry?.isNew && videoEntry?.file);
+      const videoSizeMb = videoEntry?.fileSize
+        ? (videoEntry.fileSize / (1024 * 1024)).toFixed(1)
+        : null;
 
-      if (newFiles.length > 0) {
+      // Report initial upload status
+      if (hasNewImages && hasNewVideo) {
         setUploadStatus(
-          `Uploading ${newFiles.length} image(s) to Supabase Storage...`
+          `Uploading ${newFiles.length} image(s) & video tour (${videoSizeMb} MB)...`
         );
-        const { urls, errors } = await uploadPropertyImages(
-          targetPropertyId,
-          newFiles,
-          (completed, total) => {
-            setUploadStatus(`Uploading image ${completed} of ${total}...`);
-          }
-        );
-
-        if (errors.length > 0) {
-          notify(`Upload warning: ${errors[0]}`);
-        }
-
-        uploadedUrls = urls;
+      } else if (hasNewVideo) {
+        setUploadStatus(`Uploading video tour (${videoSizeMb} MB)...`);
+      } else if (hasNewImages) {
+        setUploadStatus(`Uploading ${newFiles.length} image(s)...`);
+      } else {
+        setUploadStatus("Saving property...");
       }
 
-      // 3. Assemble final ordered image URLs
+      // 3. Concurrently upload images and video using Promise.allSettled
+      // This ensures all started uploads settle so any successful files can be identified and rolled back on error.
+      let videoUploadFinished = false;
+
+      const imagesPromise = hasNewImages
+        ? uploadPropertyImages(
+            targetPropertyId,
+            newFiles,
+            (completed, total) => {
+              if (hasNewVideo && !videoUploadFinished) {
+                if (completed < total) {
+                  setUploadStatus(
+                    `Uploading image ${completed} of ${total} & video tour...`
+                  );
+                } else {
+                  // All images uploaded; transition message to clearly indicate active video upload
+                  setUploadStatus(
+                    `Uploading video tour (${videoSizeMb} MB)...`
+                  );
+                }
+              } else {
+                setUploadStatus(`Uploading image ${completed} of ${total}...`);
+              }
+            }
+          )
+        : Promise.resolve({
+            urls: [] as string[],
+            paths: [] as string[],
+            errors: [] as string[],
+          });
+
+      const videoPromise = hasNewVideo
+        ? uploadPropertyVideo(targetPropertyId, videoEntry!.file!).then(res => {
+            videoUploadFinished = true;
+            return res;
+          })
+        : Promise.resolve({
+            url: videoEntry ? videoEntry.url : "",
+            path: null as string | null,
+            error: null as Error | null,
+          });
+
+      const [imagesSettled, videoSettled] = await Promise.allSettled([
+        imagesPromise,
+        videoPromise,
+      ]);
+
+      // Extract results and track newly uploaded files for rollback
+      let imagesResult: {
+        urls: string[];
+        paths: string[];
+        errors: string[];
+      } | null = null;
+      let videoResult: {
+        url: string | null;
+        path: string | null;
+        error: Error | null;
+      } | null = null;
+
+      if (imagesSettled.status === "fulfilled") {
+        imagesResult = imagesSettled.value;
+        if (hasNewImages && imagesResult.urls.length > 0) {
+          for (const u of imagesResult.urls) {
+            if (u) newlyUploadedImageUrls.push(u);
+          }
+        }
+      }
+
+      if (videoSettled.status === "fulfilled") {
+        videoResult = videoSettled.value;
+        if (hasNewVideo && videoResult.url) {
+          newlyUploadedVideoUrl = videoResult.url;
+        }
+      }
+
+      // Evaluate upload failures
+      if (videoSettled.status === "rejected") {
+        const reason = videoSettled.reason;
+        throw new Error(
+          `Video upload failed: ${reason instanceof Error ? reason.message : "Could not upload video tour"}`
+        );
+      }
+      if (videoResult?.error || (hasNewVideo && !videoResult?.url)) {
+        throw new Error(
+          `Video upload failed: ${videoResult?.error?.message || "Could not upload video tour"}`
+        );
+      }
+
+      if (imagesSettled.status === "rejected") {
+        const reason = imagesSettled.reason;
+        throw new Error(
+          `Image upload failed: ${reason instanceof Error ? reason.message : "Could not upload images"}`
+        );
+      }
+      if (hasNewImages && imagesResult && imagesResult.errors.length > 0) {
+        throw new Error(`Image upload failed: ${imagesResult.errors[0]}`);
+      }
+
+      const uploadedUrls = imagesResult ? imagesResult.urls : [];
+      const finalVideoUrl = videoResult
+        ? videoResult.url || ""
+        : videoEntry?.url || "";
+
+      // 4. Assemble final ordered image URLs
       let uploadIndex = 0;
       const finalImageUrls: string[] = [];
 
@@ -787,35 +979,81 @@ function PropertyEditor({
         }
       }
 
-      // 4. Update the property record with final image URLs
-      setUploadStatus("Saving property images...");
+      // 5. Update the property record with final image URLs and video URL
+      setUploadStatus("Finalizing property...");
       const { error: updateError } = await updateProperty(targetPropertyId, {
         ...form,
         images: finalImageUrls,
+        video: finalVideoUrl,
       });
 
       if (updateError) {
         throw new Error(updateError.message);
       }
 
-      // 5. Clean up removed storage images if applicable
+      // Mark property creation as finalized so it will not be rolled back
+      newlyCreatedPropertyId = null;
+
+      setUploadStatus("Property saved successfully");
+
+      // 6. Clean up removed storage media AFTER successful persistence
       for (const removedUrl of removedUrls) {
-        deletePropertyImage(removedUrl).catch(() => {});
+        deletePropertyImage(removedUrl).catch(cleanupErr => {
+          console.error("Failed to delete removed property image:", cleanupErr);
+        });
+      }
+
+      if (removedVideoUrl && removedVideoUrl !== finalVideoUrl) {
+        deletePropertyVideo(removedVideoUrl).catch(cleanupErr => {
+          console.error("Failed to delete removed property video:", cleanupErr);
+        });
       }
 
       notify(
         isNewProperty
-          ? "Property created with images"
+          ? "Property created successfully"
           : "Property updated successfully"
       );
       onClose();
     } catch (err) {
-      const message =
+      const primaryError =
         err instanceof Error
           ? err
           : new Error("An error occurred while saving property");
-      setValidationError(message.message);
-      notify(`Error: ${message.message}`);
+
+      // Best-effort rollback of newly uploaded media created during THIS failed save attempt
+      if (newlyUploadedImageUrls.length > 0) {
+        for (const imgUrl of newlyUploadedImageUrls) {
+          deletePropertyImage(imgUrl).catch(cleanupErr => {
+            console.error(
+              "Rollback error deleting newly uploaded image:",
+              cleanupErr
+            );
+          });
+        }
+      }
+
+      if (newlyUploadedVideoUrl) {
+        deletePropertyVideo(newlyUploadedVideoUrl).catch(cleanupErr => {
+          console.error(
+            "Rollback error deleting newly uploaded video:",
+            cleanupErr
+          );
+        });
+      }
+
+      // Best-effort rollback of newly created property draft row if THIS save operation created it
+      if (newlyCreatedPropertyId) {
+        deleteProperty(newlyCreatedPropertyId).catch(cleanupErr => {
+          console.error(
+            "Rollback error deleting incomplete property row:",
+            cleanupErr
+          );
+        });
+      }
+
+      setValidationError(primaryError.message);
+      notify(`Error: ${primaryError.message}`);
     } finally {
       setIsSubmitting(false);
       setUploadStatus("");
@@ -1097,6 +1335,134 @@ function PropertyEditor({
                 Click here or use the "Add Images" button to select property
                 photos.
               </p>
+            </div>
+          )}
+        </div>
+
+        {/* Property Video Tour Section */}
+        <div className="border-t border-[#012770]/10 pt-6">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h3 className="text-[0.88rem] font-extrabold uppercase tracking-[0.08em] text-[#012770]">
+                Property Video Tour
+              </h3>
+              <p className="mt-1 text-[0.66rem] text-[#637085]">
+                Upload MP4, WebM, or MOV (maximum 50 MB). Walkthrough video of
+                the property.
+              </p>
+            </div>
+            <div>
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                onChange={handleVideoSelected}
+                className="hidden"
+                id="property-video-picker"
+                disabled={isSubmitting}
+              />
+              {!videoEntry && (
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-2 border border-[#012770] bg-[#012770] px-4 py-2.5 text-[0.62rem] font-extrabold uppercase tracking-[0.1em] text-white transition-colors hover:border-[#ED7D01] hover:bg-[#ED7D01] hover:text-[#012770] disabled:opacity-50"
+                >
+                  <Video size={14} /> Add Video
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Video Preview or Dropzone */}
+          {videoEntry ? (
+            <div className="mt-4 border border-[#012770]/15 bg-[#f4f1ea] p-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                <div className="relative aspect-video w-full overflow-hidden border border-[#012770]/20 bg-black md:w-80">
+                  <video
+                    src={videoEntry.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full object-contain"
+                  >
+                    Your browser does not support video playback.
+                  </video>
+                  <div className="absolute left-2 top-2">
+                    {videoEntry.isNew ? (
+                      <span className="bg-blue-600 px-2 py-0.5 text-[0.52rem] font-bold uppercase tracking-[0.08em] text-white">
+                        New (Pending Save)
+                      </span>
+                    ) : (
+                      <span className="bg-[#012770] px-2 py-0.5 text-[0.52rem] font-bold uppercase tracking-[0.08em] text-white">
+                        Existing Video
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-1 flex-col justify-between py-1">
+                  <div>
+                    <div className="text-[0.74rem] font-bold text-[#012770]">
+                      {videoEntry.fileName || "Property Video Walkthrough"}
+                    </div>
+                    {videoEntry.fileSize && (
+                      <div className="mt-1 text-[0.62rem] text-[#637085]">
+                        File size:{" "}
+                        {(videoEntry.fileSize / (1024 * 1024)).toFixed(2)} MB
+                      </div>
+                    )}
+                    <div className="mt-2 text-[0.64rem] text-[#637085]">
+                      {videoEntry.isNew
+                        ? "This video file will be uploaded to Supabase Storage when you save this property."
+                        : "Active video tour associated with this property in storage."}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={isSubmitting}
+                      className="inline-flex items-center gap-1.5 border border-[#012770]/20 bg-white px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-[#012770] hover:border-[#ED7D01] hover:text-[#ED7D01] disabled:opacity-50"
+                    >
+                      <RefreshCw size={12} /> Replace Video
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveVideo}
+                      disabled={isSubmitting}
+                      className="inline-flex items-center gap-1.5 border border-red-200 bg-white px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <Trash2 size={12} /> Remove Video
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => videoInputRef.current?.click()}
+              className="mt-4 flex cursor-pointer flex-col items-center justify-center border-2 border-dashed border-[#012770]/20 bg-[#f4f1ea]/40 p-8 text-center transition-colors hover:border-[#ED7D01]"
+            >
+              <Video size={28} className="text-[#012770]/60" />
+              <p className="mt-2 text-[0.74rem] font-bold text-[#012770]">
+                Property Video Tour
+              </p>
+              <p className="mt-1 text-[0.62rem] text-[#637085]">
+                Upload MP4, WebM, or MOV · Maximum 50 MB
+              </p>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  videoInputRef.current?.click();
+                }}
+                disabled={isSubmitting}
+                className="mt-4 inline-flex items-center gap-2 border border-[#012770] bg-[#012770] px-4 py-2 text-[0.62rem] font-extrabold uppercase tracking-[0.1em] text-white transition-colors hover:border-[#ED7D01] hover:bg-[#ED7D01] hover:text-[#012770] disabled:opacity-50"
+              >
+                <Video size={13} /> Add Video
+              </button>
             </div>
           )}
         </div>
