@@ -401,12 +401,74 @@ export type Database = {
           updated_at?: string;
         };
       };
+      analytics_events: {
+        Row: {
+          id: string;
+          event_name: string;
+          visitor_id: string;
+          session_id: string;
+          page_path: string;
+          page_title: string | null;
+          property_id: string | null;
+          service_id: string | null;
+          source: string | null;
+          medium: string | null;
+          campaign: string | null;
+          content: string | null;
+          term: string | null;
+          referrer: string | null;
+          metadata: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_name: string;
+          visitor_id: string;
+          session_id: string;
+          page_path: string;
+          page_title?: string | null;
+          property_id?: string | null;
+          service_id?: string | null;
+          source?: string | null;
+          medium?: string | null;
+          campaign?: string | null;
+          content?: string | null;
+          term?: string | null;
+          referrer?: string | null;
+          metadata?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_name?: string;
+          visitor_id?: string;
+          session_id?: string;
+          page_path?: string;
+          page_title?: string | null;
+          property_id?: string | null;
+          service_id?: string | null;
+          source?: string | null;
+          medium?: string | null;
+          campaign?: string | null;
+          content?: string | null;
+          term?: string | null;
+          referrer?: string | null;
+          metadata?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      get_analytics_metrics: {
+        Args: {
+          start_date: string;
+          end_date: string;
+        };
+        Returns: AnalyticsMetricsResponse;
+      };
     };
     Enums: {
       user_role: "admin" | "editor" | "staff" | "user";
@@ -461,6 +523,8 @@ export type Project = Database["public"]["Tables"]["projects"]["Row"];
 export type Service = Database["public"]["Tables"]["services"]["Row"];
 export type Article = Database["public"]["Tables"]["articles"]["Row"];
 export type Lead = Database["public"]["Tables"]["leads"]["Row"];
+export type AnalyticsEvent =
+  Database["public"]["Tables"]["analytics_events"]["Row"];
 
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 export type PropertyInsert =
@@ -469,6 +533,8 @@ export type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
 export type ServiceInsert = Database["public"]["Tables"]["services"]["Insert"];
 export type ArticleInsert = Database["public"]["Tables"]["articles"]["Insert"];
 export type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
+export type AnalyticsEventInsert =
+  Database["public"]["Tables"]["analytics_events"]["Insert"];
 
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 export type PropertyUpdate =
@@ -477,8 +543,88 @@ export type ProjectUpdate = Database["public"]["Tables"]["projects"]["Update"];
 export type ServiceUpdate = Database["public"]["Tables"]["services"]["Update"];
 export type ArticleUpdate = Database["public"]["Tables"]["articles"]["Update"];
 export type LeadUpdate = Database["public"]["Tables"]["leads"]["Update"];
+export type AnalyticsEventUpdate =
+  Database["public"]["Tables"]["analytics_events"]["Update"];
 
 export type UserRole = Database["public"]["Enums"]["user_role"];
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PropertyAvailability =
   Database["public"]["Enums"]["property_availability"];
+
+// Analytics Metrics RPC Types
+export interface AnalyticsOverviewMetrics {
+  totalEvents: number;
+  uniqueVisitors: number;
+  sessions: number;
+  propertyViews: number;
+  serviceViews: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface TrafficSourceMetric {
+  source: string;
+  visitors: number;
+  events: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface TrafficMediumMetric {
+  medium: string;
+  visitors: number;
+  events: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface CampaignMetric {
+  campaign: string;
+  visitors: number;
+  events: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface TopPropertyMetric {
+  propertyId: string;
+  views: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface TopServiceMetric {
+  serviceId: string;
+  views: number;
+  whatsappClicks: number;
+  enquiries: number;
+}
+
+export interface ReferrerMetric {
+  referrer: string;
+  visitors: number;
+  events: number;
+}
+
+export interface DailyTrafficMetric {
+  date: string;
+  visitors: number;
+  events: number;
+}
+
+export interface EnquiryTypeMetric {
+  type: string;
+  count: number;
+}
+
+export interface AnalyticsMetricsResponse {
+  overview: AnalyticsOverviewMetrics;
+  trafficSources: TrafficSourceMetric[];
+  trafficMediums: TrafficMediumMetric[];
+  campaigns: CampaignMetric[];
+  topProperties: TopPropertyMetric[];
+  topServices: TopServiceMetric[];
+  referrers: ReferrerMetric[];
+  dailyTraffic: DailyTrafficMetric[];
+  enquiryTypes: EnquiryTypeMetric[];
+}

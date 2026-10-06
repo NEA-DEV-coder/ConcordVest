@@ -1,5 +1,5 @@
 /* CONCORDVEST / Quiet Structure: service detail pages read like disciplined project briefs—clear scope, process, and a quote-led close with no invented pricing. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
@@ -27,6 +27,10 @@ import { BrandButton } from "@/components/BrandButton";
 import { ServicePackageCard } from "@/components/ServicePackageCard";
 import { RenovationQuoteFlow } from "@/components/RenovationQuoteFlow";
 import { useService, useServices } from "@/hooks/useContent";
+import { trackEvent } from "@/lib/analytics";
+
+const VIEWED_SERVICES_SESSION_KEY = "concordvest_viewed_services";
+const inMemoryViewedServices = new Set<string>();
 
 export default function ServiceDetail() {
   const [, params] = useRoute("/services/:slug");
@@ -40,6 +44,58 @@ export default function ServiceDetail() {
     params?.slug === customService.slug
       ? customService
       : services.find(s => s.slug === params?.slug);
+
+  // Track service detail view once per service per browser session
+  useEffect(() => {
+    if (!service?.id) return;
+
+    let alreadyViewed = inMemoryViewedServices.has(service.id);
+
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(
+          VIEWED_SERVICES_SESSION_KEY
+        );
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.includes(service.id)) {
+            alreadyViewed = true;
+          }
+        }
+      }
+    } catch {
+      // sessionStorage restricted or unavailable
+    }
+
+    if (!alreadyViewed) {
+      inMemoryViewedServices.add(service.id);
+      try {
+        if (typeof window !== "undefined" && window.sessionStorage) {
+          const stored = window.sessionStorage.getItem(
+            VIEWED_SERVICES_SESSION_KEY
+          );
+          const parsed = stored ? JSON.parse(stored) : [];
+          const list = Array.isArray(parsed) ? parsed : [];
+          if (!list.includes(service.id)) {
+            list.push(service.id);
+            window.sessionStorage.setItem(
+              VIEWED_SERVICES_SESSION_KEY,
+              JSON.stringify(list)
+            );
+          }
+        }
+      } catch {
+        // sessionStorage restricted
+      }
+
+      trackEvent("service_view", {
+        serviceId: service.id,
+        metadata: {
+          location: "service_detail",
+        },
+      });
+    }
+  }, [service?.id]);
 
   if (isLoading) return <LoadingState />;
   if (error)

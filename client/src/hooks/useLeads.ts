@@ -20,6 +20,7 @@ import {
   type LeadPayload,
   type LeadStatus,
 } from "@/lib/leads";
+import { trackEvent } from "@/lib/analytics";
 
 // Simple email regex for validation
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -117,11 +118,28 @@ export function leadDbToPayload(
   };
 }
 
+const interestLocationMap: Record<string, string> = {
+  "Property Enquiry": "property_enquiry",
+  "Viewing Request": "viewing_request",
+  "Renovation Quote": "renovation_quote",
+  "Site Inspection": "site_inspection",
+  "Building Project": "building_project",
+  "Agent Conversation": "agent_conversation",
+};
+
+export type SubmitLeadPayload = Omit<
+  LeadPayload,
+  "id" | "date" | "status" | "isRead"
+> & {
+  location?: string;
+  formType?: string;
+};
+
 /**
  * Submit a new lead
  */
 export async function submitLead(
-  payload: Omit<LeadPayload, "id" | "date" | "status" | "isRead">
+  payload: SubmitLeadPayload
 ): Promise<{ success: boolean; leadId: string; error: Error | null }> {
   // 1. Validation
   if (!payload.name?.trim()) {
@@ -162,9 +180,32 @@ export async function submitLead(
 
   const newLead = createLead(payload);
 
+  const location =
+    payload.location ||
+    interestLocationMap[payload.interestType] ||
+    "general";
+
   // In demo mode, save to localStorage and return success
   if (!isSupabaseConfigured()) {
     recordLead(newLead);
+
+    // Non-blocking background analytics tracking after successful submission
+    try {
+      trackEvent("enquiry_submit", {
+        propertyId: payload.propertyId || undefined,
+        serviceId: payload.serviceId || undefined,
+        metadata: {
+          interestType: payload.interestType,
+          location,
+          ...(payload.formType ? { formType: payload.formType } : {}),
+        },
+      }).catch(err => {
+        console.warn("Analytics tracking failed for enquiry_submit:", err);
+      });
+    } catch (analyticsError) {
+      console.warn("Analytics error during enquiry_submit:", analyticsError);
+    }
+
     return { success: true, leadId: newLead.id, error: null };
   }
 
@@ -184,6 +225,23 @@ export async function submitLead(
     }
 
     recordLead(newLead);
+
+    // Non-blocking background analytics tracking after successful submission
+    try {
+      trackEvent("enquiry_submit", {
+        propertyId: payload.propertyId || undefined,
+        serviceId: payload.serviceId || undefined,
+        metadata: {
+          interestType: payload.interestType,
+          location,
+          ...(payload.formType ? { formType: payload.formType } : {}),
+        },
+      }).catch(err => {
+        console.warn("Analytics tracking failed for enquiry_submit:", err);
+      });
+    } catch (analyticsError) {
+      console.warn("Analytics error during enquiry_submit:", analyticsError);
+    }
 
     return {
       success: true,

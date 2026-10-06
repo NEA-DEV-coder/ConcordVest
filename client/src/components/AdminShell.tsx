@@ -15,6 +15,7 @@ import {
   Sparkles,
   Users,
   X,
+  LineChart,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { isSupabaseConfigured } from "@/lib/supabase";
@@ -22,6 +23,7 @@ import type { UserRole } from "@/lib/supabase";
 
 const navItems = [
   { label: "Overview", href: "/admin", icon: BarChart3 },
+  { label: "Analytics", href: "/admin/analytics", icon: LineChart },
   { label: "Properties", href: "/admin/properties", icon: Building2 },
   { label: "Projects", href: "/admin/projects", icon: FolderKanban },
   { label: "Services", href: "/admin/services", icon: Sparkles },

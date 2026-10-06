@@ -12,6 +12,7 @@ import {
   getLeadContext,
 } from "@/lib/leads";
 import { submitLead } from "@/hooks/useLeads";
+import { trackEvent } from "@/lib/analytics";
 
 export function whatsappLink(propertyTitle: string) {
   return buildWhatsAppUrl(buildPropertyWhatsAppMessage(propertyTitle));
@@ -55,6 +56,8 @@ export function EnquiryModal({
         message: form.message,
         source: context.source,
         page: context.page,
+        location: "property_enquiry",
+        formType: "property_enquiry_modal",
       });
 
       if (!result.success) {
@@ -129,6 +132,14 @@ export function EnquiryModal({
               href={buildWhatsAppUrl(leadMessage)}
               target="_blank"
               rel="noreferrer"
+              onClick={() => {
+                trackEvent("whatsapp_click", {
+                  propertyId: property.id,
+                  metadata: {
+                    location: "property_detail",
+                  },
+                });
+              }}
               className="mt-7 inline-flex items-center gap-2 bg-[#012770] px-5 py-4 text-[0.64rem] font-extrabold uppercase tracking-[0.13em] text-white transition-transform hover:-translate-y-0.5"
             >
               <MessageCircle size={16} /> Continue on WhatsApp

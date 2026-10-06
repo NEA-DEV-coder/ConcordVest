@@ -6,6 +6,7 @@ import { Footer } from "@/components/Editorial";
 import { BrandButton } from "@/components/BrandButton";
 import { BuildingProjectAssessmentFlow } from "@/components/BuildingProjectAssessmentFlow";
 import { buildWhatsAppUrl } from "@/lib/leads";
+import { trackEvent } from "@/lib/analytics";
 
 export default function StartBuildingProject() {
   const [, setLocation] = useLocation();
@@ -41,6 +42,11 @@ export default function StartBuildingProject() {
   };
 
   const openWhatsApp = () => {
+    trackEvent("whatsapp_click", {
+      metadata: {
+        location: "contact",
+      },
+    });
     const url = buildWhatsAppUrl(
       "Hello Concordvest, I'd like to talk to an agent about starting a building project."
     );

@@ -23,6 +23,7 @@ import { Footer, ArticleCard } from "@/components/Editorial";
 import { servicePackages } from "@/lib/services";
 import { resolveNavigation } from "@/lib/navigation";
 import { buildWhatsAppUrl } from "@/lib/leads";
+import { trackEvent } from "@/lib/analytics";
 
 // Development/demo images - for production, these should be replaced with Supabase Storage URLs
 const asset = {
@@ -543,15 +544,20 @@ export default function Home() {
                   </BrandButton>
                   <BrandButton
                     variant="outline"
-                    onClick={() =>
+                    onClick={() => {
+                      trackEvent("whatsapp_click", {
+                        metadata: {
+                          location: "contact",
+                        },
+                      });
                       window.open(
                         buildWhatsAppUrl(
                           "Hello Concordvest, I'd like to talk to an agent."
                         ),
                         "_blank",
                         "noopener,noreferrer"
-                      )
-                    }
+                      );
+                    }}
                   >
                     Talk to an Agent
                   </BrandButton>

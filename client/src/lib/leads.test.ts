@@ -10,6 +10,8 @@ import {
 } from "../hooks/useLeads";
 import { type LeadPayload, buildBuildingProjectWhatsAppMessage } from "./leads";
 import { type Lead } from "./supabase";
+import * as analyticsModule from "./analytics";
+import * as supabaseModule from "./supabase";
 
 describe("leadPayloadToDb", () => {
   it("correctly maps camelCase frontend payload to snake_case database insert object", () => {
@@ -224,5 +226,172 @@ describe("Building Project Lead & WhatsApp formatting", () => {
     });
 
     expect(message).toContain("Budget: To discuss");
+  });
+});
+
+describe("submitLead Analytics Tracking (enquiry_submit)", () => {
+  it("tracks enquiry_submit with propertyId, interestType, and location on successful submission", async () => {
+    vi.spyOn(supabaseModule, "isSupabaseConfigured").mockReturnValue(true);
+    vi.spyOn(supabaseModule.supabase, "from").mockReturnValue({
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    } as any);
+
+    const trackSpy = vi.spyOn(analyticsModule, "trackEvent").mockResolvedValue({
+      success: true,
+    });
+
+    const payload = {
+      name: "Amina Yusuf",
+      phone: "08012345678",
+      whatsapp: "08012345678",
+      email: "amina@example.com",
+      interestType: "Property Enquiry" as const,
+      propertyId: "3b764267-27b9-4c8d-9fa6-200cc550ad41",
+      property: "Asokoro Contemporary Villa",
+      message: "I want to schedule an inspection.",
+      source: "Direct" as const,
+      page: "/properties/asokoro-villa",
+      location: "property_enquiry",
+      formType: "property_enquiry_modal",
+    };
+
+    const result = await submitLead(payload);
+    expect(result.success).toBe(true);
+
+    expect(trackSpy).toHaveBeenCalledWith("enquiry_submit", {
+      propertyId: "3b764267-27b9-4c8d-9fa6-200cc550ad41",
+      serviceId: undefined,
+      metadata: {
+        interestType: "Property Enquiry",
+        location: "property_enquiry",
+        formType: "property_enquiry_modal",
+      },
+    });
+
+    // Verify zero PII in analytics metadata
+    const calledMetadata = trackSpy.mock.calls[0][1]?.metadata;
+    expect(calledMetadata).not.toHaveProperty("name");
+    expect(calledMetadata).not.toHaveProperty("email");
+    expect(calledMetadata).not.toHaveProperty("phone");
+    expect(calledMetadata).not.toHaveProperty("whatsapp");
+    expect(calledMetadata).not.toHaveProperty("message");
+
+    vi.restoreAllMocks();
+  });
+
+  it("tracks enquiry_submit with serviceId for renovation quotes and site inspections", async () => {
+    vi.spyOn(supabaseModule, "isSupabaseConfigured").mockReturnValue(true);
+    vi.spyOn(supabaseModule.supabase, "from").mockReturnValue({
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    } as any);
+
+    const trackSpy = vi.spyOn(analyticsModule, "trackEvent").mockResolvedValue({
+      success: true,
+    });
+
+    const payload = {
+      name: "Emeka Okonkwo",
+      phone: "09012345678",
+      whatsapp: "09012345678",
+      email: "emeka@example.com",
+      interestType: "Renovation Quote" as const,
+      serviceId: "5c864267-27b9-4c8d-9fa6-200cc550ad42",
+      service: "Kitchen Transformation",
+      message: "Full kitchen remodeling.",
+      source: "Service Page" as const,
+      page: "/services/kitchen-transformation",
+    };
+
+    const result = await submitLead(payload);
+    expect(result.success).toBe(true);
+
+    expect(trackSpy).toHaveBeenCalledWith("enquiry_submit", {
+      propertyId: undefined,
+      serviceId: "5c864267-27b9-4c8d-9fa6-200cc550ad42",
+      metadata: {
+        interestType: "Renovation Quote",
+        location: "renovation_quote",
+      },
+    });
+
+    vi.restoreAllMocks();
+  });
+
+  it("does NOT track enquiry_submit if validation fails", async () => {
+    const trackSpy = vi.spyOn(analyticsModule, "trackEvent").mockResolvedValue({
+      success: true,
+    });
+
+    const invalidPayload = {
+      name: "",
+      phone: "080",
+      whatsapp: "",
+      email: "invalid-email",
+      interestType: "Property Enquiry" as const,
+      message: "",
+      source: "Direct" as const,
+      page: "",
+    };
+
+    const result = await submitLead(invalidPayload);
+    expect(result.success).toBe(false);
+    expect(trackSpy).not.toHaveBeenCalled();
+
+    trackSpy.mockRestore();
+  });
+
+  it("does NOT track enquiry_submit if database insertion fails", async () => {
+    vi.spyOn(supabaseModule, "isSupabaseConfigured").mockReturnValue(true);
+    vi.spyOn(supabaseModule.supabase, "from").mockReturnValue({
+      insert: vi.fn().mockResolvedValue({
+        error: { message: "Database connection failed" },
+      }),
+    } as any);
+
+    const trackSpy = vi.spyOn(analyticsModule, "trackEvent").mockResolvedValue({
+      success: true,
+    });
+
+    const payload = {
+      name: "Ngozi Eze",
+      phone: "08099998888",
+      whatsapp: "",
+      email: "ngozi@example.com",
+      interestType: "Viewing Request" as const,
+      propertyId: "prop-123",
+      message: "Please view on Monday.",
+      source: "Direct" as const,
+      page: "/properties/view",
+    };
+
+    const result = await submitLead(payload);
+    expect(result.success).toBe(false);
+    expect(trackSpy).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
+  });
+
+  it("preserves lead submission success even if analytics tracking fails", async () => {
+    vi.spyOn(supabaseModule, "isSupabaseConfigured").mockReturnValue(false);
+    const trackSpy = vi
+      .spyOn(analyticsModule, "trackEvent")
+      .mockRejectedValue(new Error("Network offline"));
+
+    const payload = {
+      name: "Bala Mohammed",
+      phone: "08055554444",
+      whatsapp: "",
+      email: "bala@example.com",
+      interestType: "Building Project" as const,
+      message: "Building from foundation.",
+      source: "Direct" as const,
+      page: "/start-building-project",
+    };
+
+    const result = await submitLead(payload);
+    expect(result.success).toBe(true);
+    expect(result.leadId).toBeDefined();
+
+    trackSpy.mockRestore();
   });
 });

@@ -22,6 +22,7 @@ import { submitLead } from "@/hooks/useLeads";
 import { customService, servicePackages } from "@/lib/services";
 
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { trackEvent } from "@/lib/analytics";
 
 const stepLabels = [
   "Choose service",
@@ -73,6 +74,7 @@ export function RenovationQuoteFlow({
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leadMessage, setLeadMessage] = useState("");
+  const [submittedServiceId, setSubmittedServiceId] = useState<string | undefined>(undefined);
   const [quote, setQuote] = useState<QuoteForm>({
     service: customService.slug,
     name: "",
@@ -147,6 +149,8 @@ export function RenovationQuoteFlow({
         message,
         source: context.source,
         page: context.page,
+        location: "renovation_quote",
+        formType: "renovation_quote_flow",
       });
 
       if (!result.success) {
@@ -170,6 +174,7 @@ export function RenovationQuoteFlow({
       };
 
       setLeadMessage(buildLeadWhatsAppMessage(lead));
+      setSubmittedServiceId(serviceId);
       setStep(7);
       toast.success("Renovation quote request submitted successfully.");
     } catch (error) {
@@ -222,6 +227,8 @@ export function RenovationQuoteFlow({
         page: context.page,
         preferredDate: inspection.preferredDate,
         preferredTime: inspection.preferredTime,
+        location: "site_inspection",
+        formType: "site_inspection_flow",
       });
 
       if (!result.success) {
@@ -247,6 +254,7 @@ export function RenovationQuoteFlow({
       };
 
       setLeadMessage(buildLeadWhatsAppMessage(lead));
+      setSubmittedServiceId(serviceId);
       setSubmitted(true);
       toast.success("Site inspection booked successfully.");
     } catch (error) {
@@ -264,7 +272,11 @@ export function RenovationQuoteFlow({
   return (
     <div className="bg-[#f4f1ea] p-5 sm:p-8 lg:p-10">
       {submitted ? (
-        <Confirmation message={leadMessage} onNavigate={onNavigate} />
+        <Confirmation
+          message={leadMessage}
+          serviceId={submittedServiceId}
+          onNavigate={onNavigate}
+        />
       ) : (
         <>
           <div className="flex flex-col justify-between gap-5 border-b border-[#012770]/14 pb-6 sm:flex-row sm:items-end">
@@ -811,9 +823,11 @@ function SelectField({
 
 function Confirmation({
   message,
+  serviceId,
   onNavigate,
 }: {
   message: string;
+  serviceId?: string;
   onNavigate: (path: string) => void;
 }) {
   return (
@@ -833,6 +847,14 @@ function Confirmation({
           href={buildWhatsAppUrl(message)}
           target="_blank"
           rel="noreferrer"
+          onClick={() => {
+            trackEvent("whatsapp_click", {
+              serviceId,
+              metadata: {
+                location: "service",
+              },
+            });
+          }}
           className="inline-flex items-center justify-center gap-2 bg-[#012770] px-5 py-4 text-[0.64rem] font-extrabold uppercase tracking-[0.13em] text-white"
         >
           <MessageCircle size={16} /> Continue on WhatsApp

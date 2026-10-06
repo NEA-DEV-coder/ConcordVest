@@ -94,6 +94,7 @@ import {
   validateVideoFile,
   MAX_VIDEO_FILE_SIZE,
 } from "@/lib/storage";
+import AdminAnalytics from "./AdminAnalytics";
 
 const navy = "#012770";
 const orange = "#ED7D01";
@@ -157,6 +158,7 @@ function AdminRouter({
 }) {
   if (path === "/admin" || path === "/admin/")
     return <Dashboard onNavigate={onNavigate} />;
+  if (path.startsWith("/admin/analytics")) return <AdminAnalytics />;
   if (path.startsWith("/admin/properties")) return <PropertiesSection />;
   if (path.startsWith("/admin/projects")) return <ProjectsSection />;
   if (path.startsWith("/admin/services")) return <ServicesSection />;

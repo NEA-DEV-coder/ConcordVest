@@ -40,6 +40,10 @@ import { formatNaira, type PropertyRecord } from "@/lib/properties";
 import { useProperty, useProperties } from "@/hooks/useProperties";
 import { servicePackages } from "@/lib/services";
 import { resolveNavigation } from "@/lib/navigation";
+import { trackEvent } from "@/lib/analytics";
+
+const VIEWED_PROPERTIES_SESSION_KEY = "concordvest_viewed_properties";
+const inMemoryViewedProperties = new Set<string>();
 
 const serviceData = [
   ["01", "Home Refresh"],
@@ -98,6 +102,55 @@ function PropertyDetailContent({
   const [saved, setSaved] = useState(false);
 
   const hasVideo = Boolean(property.video && property.video.trim());
+
+  // Track property detail view once per property per browser session
+  useEffect(() => {
+    if (!property?.id) return;
+
+    let alreadyViewed = inMemoryViewedProperties.has(property.id);
+
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        const stored = window.sessionStorage.getItem(
+          VIEWED_PROPERTIES_SESSION_KEY
+        );
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.includes(property.id)) {
+            alreadyViewed = true;
+          }
+        }
+      }
+    } catch {
+      // sessionStorage restricted or unavailable
+    }
+
+    if (!alreadyViewed) {
+      inMemoryViewedProperties.add(property.id);
+      try {
+        if (typeof window !== "undefined" && window.sessionStorage) {
+          const stored = window.sessionStorage.getItem(
+            VIEWED_PROPERTIES_SESSION_KEY
+          );
+          const parsed = stored ? JSON.parse(stored) : [];
+          const list = Array.isArray(parsed) ? parsed : [];
+          if (!list.includes(property.id)) {
+            list.push(property.id);
+            window.sessionStorage.setItem(
+              VIEWED_PROPERTIES_SESSION_KEY,
+              JSON.stringify(list)
+            );
+          }
+        }
+      } catch {
+        // sessionStorage restricted
+      }
+
+      trackEvent("property_view", {
+        propertyId: property.id,
+      });
+    }
+  }, [property?.id]);
 
   // Fetch all properties for related sections
   const { properties } = useProperties();
@@ -263,6 +316,14 @@ function PropertyDetailContent({
                       href={whatsappLink(property.title)}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={() => {
+                        trackEvent("whatsapp_click", {
+                          propertyId: property.id,
+                          metadata: {
+                            location: "property_detail",
+                          },
+                        });
+                      }}
                       className="inline-flex flex-1 items-center justify-center gap-2 border border-white/45 px-4 py-4 text-[0.62rem] font-extrabold uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ED7D01] hover:text-[#ED7D01]"
                     >
                       <MessageCircle size={15} /> WhatsApp an Agent

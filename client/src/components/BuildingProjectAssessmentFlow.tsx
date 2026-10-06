@@ -19,6 +19,7 @@ import {
 } from "@/lib/leads";
 import { submitLead } from "@/hooks/useLeads";
 import { locations } from "@/lib/properties";
+import { trackEvent } from "@/lib/analytics";
 
 const stepLabels = [
   "Building type",
@@ -272,6 +273,8 @@ export function BuildingProjectAssessmentFlow({
         message: messageLines,
         source: "Direct",
         page: "/start-building-project",
+        location: "building_project",
+        formType: "building_project_assessment",
       });
 
       if (!result.success) {
@@ -1062,6 +1065,13 @@ function SuccessScreen({
           href={buildWhatsAppUrl(whatsAppMessage)}
           target="_blank"
           rel="noreferrer"
+          onClick={() => {
+            trackEvent("whatsapp_click", {
+              metadata: {
+                location: "contact",
+              },
+            });
+          }}
           className="inline-flex items-center justify-center gap-2 bg-[#012770] px-6 py-4 text-[0.66rem] font-extrabold uppercase tracking-[0.13em] text-white transition-colors hover:bg-[#023799]"
         >
           <MessageCircle size={17} /> Talk to a Concordvest Agent on WhatsApp
